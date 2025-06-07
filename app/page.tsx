@@ -3,13 +3,13 @@
 import { useState, useMemo, useEffect } from 'react'
 import styled from 'styled-components'
 import { ChatMessage as OllamaChatMessage, OllamaModel } from '@/lib/ollama'
-import { parseContentWithMath, renderMath, MathSegment } from '@/lib/math'
+import { ContentRenderer } from '@/app/chat/components/ContentRenderer'
 
 const ChatContainer = styled.div`
   display: flex;
   flex-direction: column;
   height: 100vh;
-  max-width: 800px;
+  max-width: 1000px;
   margin: 0 auto;
   padding: 20px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -200,25 +200,7 @@ const ThinkingContent = styled.div<{ $isExpanded: boolean }>`
   ${props => !props.$isExpanded && 'line-height: 0;'}
 `
 
-const MathDisplay = styled.div`
-  margin: 15px 0;
-  text-align: center;
-  overflow-x: auto;
-  
-  .katex-display {
-    margin: 0;
-  }
-`
 
-const MathInline = styled.span`
-  .katex {
-    font-size: 1em;
-  }
-`
-
-const ContentSegment = styled.span`
-  white-space: pre-wrap;
-`
 
 const ChatForm = styled.form`
   display: flex;
@@ -402,56 +384,7 @@ export default function ChatPage() {
     })
   }
 
-  const ContentWithMath = ({ content }: { content: string }) => {
-    const segments = useMemo(() => {
-      if (!content) return [{ type: 'text' as const, content: '' }]
-      
-      const parsed = parseContentWithMath(content)
-      // Debug logging
-      if (content.includes('\\[') || content.includes('\\(') || content.includes('$')) {
-        console.log('Math content detected in:', content.substring(0, 200))
-        console.log('Parsed into', parsed.length, 'segments:')
-        parsed.forEach((seg, i) => console.log(`  ${i}: ${seg.type} - "${seg.content.substring(0, 50)}..."`))
-      }
-      return parsed
-    }, [content])
-    
-    if (!content) return null
-    
-    return (
-      <>
-        {segments.map((segment: MathSegment, index: number) => {
-          switch (segment.type) {
-            case 'math_display':
-              return (
-                <MathDisplay
-                  key={segment.id || `display-${index}`}
-                  dangerouslySetInnerHTML={{
-                    __html: renderMath(segment.content, true)
-                  }}
-                />
-              )
-            case 'math_inline':
-              return (
-                <MathInline
-                  key={segment.id || `inline-${index}`}
-                  dangerouslySetInnerHTML={{
-                    __html: renderMath(segment.content, false)
-                  }}
-                />
-              )
-            case 'text':
-            default:
-              return (
-                <ContentSegment key={`text-${index}`}>
-                  {segment.content}
-                </ContentSegment>
-              )
-          }
-        })}
-      </>
-    )
-  }
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -687,11 +620,11 @@ export default function ChatPage() {
                       🧠 {expandedThinking.has(message.id) ? 'Hide' : 'Show'} Thinking Process
                     </ThinkingToggle>
                     <ThinkingContent $isExpanded={expandedThinking.has(message.id)}>
-                      <ContentWithMath content={message.thinkingContent} />
+                      <ContentRenderer content={message.thinkingContent} />
                     </ThinkingContent>
                   </ThinkingSection>
                 )}
-                <ContentWithMath content={message.content} />
+                <ContentRenderer content={message.content} />
                 {streamingMessageId === message.id && !message.content && !message.thinkingContent && (
                   <TypingIndicator>Thinking</TypingIndicator>
                 )}

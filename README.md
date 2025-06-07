@@ -52,6 +52,8 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to start c
 - 🔍 **Expandable thinking sections** to see AI's reasoning steps
 - 📐 **LaTeX math rendering** with KaTeX (supports `\[...\]` and `$...$`)
 - 🧮 **Real-time math display** during streaming responses
+- 📝 **Markdown support** for formatted text (**bold**, *italic*, lists, headers, code)
+- 🎨 **Mixed content rendering** seamlessly combines Markdown, LaTeX, and thinking content
 - 🎯 **Model selector** with auto-discovery of available Ollama models
 - 🔄 **Dynamic model switching** without restarting the application
 - 🚀 **Fast local inference** with progressive text display
@@ -66,13 +68,17 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to start c
 │   │   │       └── route.ts # Streaming API endpoint
 │   │   └── models/
 │   │       └── route.ts     # Models API endpoint
+│   ├── chat/
+│   │   └── components/
+│   │       └── ContentRenderer.tsx      # Markdown & Math content renderer
 │   ├── components/
 │   │   └── StyledComponentsRegistry.tsx  # Styled components setup
 │   ├── globals.css          # Global styles
 │   ├── layout.tsx           # Root layout
 │   └── page.tsx             # Chat interface
 ├── lib/
-│   ├── math.ts              # LaTeX math parsing utilities
+│   ├── content-parser.ts    # Combined Markdown & LaTeX parsing utilities
+│   ├── math.ts              # LaTeX math parsing utilities (legacy)
 │   └── ollama.ts            # Ollama client utilities (with streaming & models)
 ├── .eslintrc.json          # ESLint configuration
 ├── .gitignore              # Git ignore rules
@@ -115,6 +121,20 @@ Full support for mathematical expressions with **KaTeX**:
 \[S_{n+1} = \frac{n(n+1)}{2} + \frac{2(n+1)}{2}\]  # Display math
 The equation $E = mc^2$ is famous.                    # Inline math
 ```
+
+### Markdown Text Formatting
+
+Full **Markdown syntax** support with styled rendering:
+
+- **Headers**: `# Header 1`, `## Header 2`, etc.
+- **Bold Text**: `**bold**` renders as **bold**
+- **Italic Text**: `*italic*` renders as *italic*
+- **Lists**: Both `* bullet` and `1. numbered` lists
+- **Code**: `inline code` and ```code blocks```
+- **Links**: `[text](url)` with hover effects
+- **Blockquotes**: `> quoted text` with left border styling
+
+**Smart Content Detection**: The parser automatically detects whether text contains Markdown syntax and applies appropriate rendering, while preserving plain text for simple messages.
 
 ### Model Selection
 

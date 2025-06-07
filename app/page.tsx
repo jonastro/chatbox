@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import styled from 'styled-components'
-import { getChatResponse } from '@/lib/actions'
 import { ChatMessage as OllamaChatMessage } from '@/lib/ollama'
+import { parseContentWithMath, renderMath, MathSegment } from '@/lib/math'
 
 const ChatContainer = styled.div`
   display: flex;
@@ -108,6 +108,60 @@ const MessageContent = styled.div`
   white-space: pre-wrap;
 `
 
+const ThinkingSection = styled.div`
+  margin-bottom: 10px;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  border-left: 3px solid rgba(0, 0, 0, 0.2);
+  font-style: italic;
+  opacity: 0.8;
+  font-size: 0.9em;
+`
+
+const ThinkingToggle = styled.button`
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.8em;
+  margin-bottom: 5px;
+  opacity: 0.7;
+  
+  &:hover {
+    opacity: 1;
+  }
+`
+
+const ThinkingContent = styled.div<{ $isExpanded: boolean }>`
+  max-height: ${props => props.$isExpanded ? 'none' : '0'};
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+  white-space: pre-wrap;
+  
+  ${props => !props.$isExpanded && 'line-height: 0;'}
+`
+
+const MathDisplay = styled.div`
+  margin: 15px 0;
+  text-align: center;
+  overflow-x: auto;
+  
+  .katex-display {
+    margin: 0;
+  }
+`
+
+const MathInline = styled.span`
+  .katex {
+    font-size: 1em;
+  }
+`
+
+const ContentSegment = styled.span`
+  white-space: pre-wrap;
+`
+
 const ChatForm = styled.form`
   display: flex;
   gap: 10px;
@@ -178,22 +232,136 @@ const LoadingSpinner = styled.div`
   }
 `
 
+const TypingIndicator = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  
+  &::after {
+    content: '';
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: currentColor;
+    opacity: 0.6;
+    animation: pulse 1.4s ease-in-out infinite both;
+  }
+  
+  &::before {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: currentColor;
+    opacity: 0.4;
+    animation: pulse 1.4s ease-in-out 0.2s infinite both;
+    margin-right: 2px;
+  }
+  
+  @keyframes pulse {
+    0%, 80%, 100% {
+      transform: scale(1);
+      opacity: 0.4;
+    }
+    40% {
+      transform: scale(1.2);
+      opacity: 1;
+    }
+  }
+`
+
 interface ChatMessage {
   id: number
   content: string
+  thinkingContent: string
   isUser: boolean
   timestamp: Date
 }
 
-// Remove the local interface since we're importing from ollama.ts
+enum StreamingState {
+  NORMAL = 'normal',
+  THINKING = 'thinking',
+  MATH_DISPLAY = 'math_display',
+  MATH_INLINE = 'math_inline',
+  PARTIAL_OPEN_TAG = 'partial_open_tag',
+  PARTIAL_CLOSE_TAG = 'partial_close_tag'
+}
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [streamingMessageId, setStreamingMessageId] = useState<number | null>(null)
+  const [expandedThinking, setExpandedThinking] = useState<Set<number>>(new Set())
 
   const clearConversation = () => {
     setMessages([])
+    setExpandedThinking(new Set())
+  }
+
+  const toggleThinking = (messageId: number) => {
+    setExpandedThinking(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(messageId)) {
+        newSet.delete(messageId)
+      } else {
+        newSet.add(messageId)
+      }
+      return newSet
+    })
+  }
+
+  const ContentWithMath = ({ content }: { content: string }) => {
+    const segments = useMemo(() => {
+      if (!content) return [{ type: 'text' as const, content: '' }]
+      
+      const parsed = parseContentWithMath(content)
+      // Debug logging
+      if (content.includes('\\[') || content.includes('\\(') || content.includes('$')) {
+        console.log('Math content detected in:', content.substring(0, 200))
+        console.log('Parsed into', parsed.length, 'segments:')
+        parsed.forEach((seg, i) => console.log(`  ${i}: ${seg.type} - "${seg.content.substring(0, 50)}..."`))
+      }
+      return parsed
+    }, [content])
+    
+    if (!content) return null
+    
+    return (
+      <>
+        {segments.map((segment: MathSegment, index: number) => {
+          switch (segment.type) {
+            case 'math_display':
+              return (
+                <MathDisplay
+                  key={segment.id || `display-${index}`}
+                  dangerouslySetInnerHTML={{
+                    __html: renderMath(segment.content, true)
+                  }}
+                />
+              )
+            case 'math_inline':
+              return (
+                <MathInline
+                  key={segment.id || `inline-${index}`}
+                  dangerouslySetInnerHTML={{
+                    __html: renderMath(segment.content, false)
+                  }}
+                />
+              )
+            case 'text':
+            default:
+              return (
+                <ContentSegment key={`text-${index}`}>
+                  {segment.content}
+                </ContentSegment>
+              )
+          }
+        })}
+      </>
+    )
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -203,6 +371,7 @@ export default function ChatPage() {
     const userMessage: ChatMessage = {
       id: Date.now(),
       content: input.trim(),
+      thinkingContent: '',
       isUser: true,
       timestamp: new Date()
     }
@@ -210,6 +379,19 @@ export default function ChatPage() {
     setMessages(prev => [...prev, userMessage])
     setInput('')
     setIsLoading(true)
+
+    // Create AI message placeholder for streaming
+    const aiMessageId = Date.now() + 1
+    const aiMessage: ChatMessage = {
+      id: aiMessageId,
+      content: '',
+      thinkingContent: '',
+      isUser: false,
+      timestamp: new Date()
+    }
+
+    setMessages(prev => [...prev, aiMessage])
+    setStreamingMessageId(aiMessageId)
 
     try {
       // Convert chat messages to Ollama format with conversation history
@@ -224,28 +406,127 @@ export default function ChatPage() {
         }
       ]
 
-      // Call server action directly instead of API route
-      const response = await getChatResponse(ollamaMessages)
-      
-      const aiMessage: ChatMessage = {
-        id: Date.now() + 1,
-        content: response || 'Sorry, I could not generate a response.',
-        isUser: false,
-        timestamp: new Date()
+      // Use streaming API
+      const response = await fetch('/api/chat/stream', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ messages: ollamaMessages }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to get response')
       }
 
-      setMessages(prev => [...prev, aiMessage])
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder()
+
+      if (!reader) {
+        throw new Error('No reader available')
+      }
+
+      let accumulatedContent = ''
+      let accumulatedThinking = ''
+      let buffer = ''
+      let state = StreamingState.NORMAL
+
+      const processContent = (newChunk: string) => {
+        buffer += newChunk
+        let processedContent = ''
+        let processedThinking = ''
+        
+        while (buffer.length > 0) {
+          if (state === StreamingState.NORMAL) {
+            const thinkStartIndex = buffer.indexOf('<think>')
+            if (thinkStartIndex === -1) {
+              // No thinking tag found, add to content
+              processedContent += buffer
+              buffer = ''
+            } else {
+              // Found start of thinking
+              processedContent += buffer.substring(0, thinkStartIndex)
+              buffer = buffer.substring(thinkStartIndex + 7) // Remove '<think>'
+              state = StreamingState.THINKING
+            }
+          } else if (state === StreamingState.THINKING) {
+            const thinkEndIndex = buffer.indexOf('</think>')
+            if (thinkEndIndex === -1) {
+              // No end tag found yet, add all to thinking
+              processedThinking += buffer
+              buffer = ''
+            } else {
+              // Found end of thinking
+              processedThinking += buffer.substring(0, thinkEndIndex)
+              buffer = buffer.substring(thinkEndIndex + 8) // Remove '</think>'
+              state = StreamingState.NORMAL
+            }
+          }
+        }
+        
+        return { processedContent, processedThinking }
+      }
+
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+
+        const chunk = decoder.decode(value)
+        const lines = chunk.split('\n')
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6))
+              
+              if (data.error) {
+                throw new Error(data.error)
+              }
+              
+              if (data.done) {
+                setStreamingMessageId(null)
+                break
+              }
+              
+              if (data.content) {
+                const { processedContent, processedThinking } = processContent(data.content)
+                accumulatedContent += processedContent
+                accumulatedThinking += processedThinking
+                
+                setMessages(prev => 
+                  prev.map(msg => 
+                    msg.id === aiMessageId 
+                      ? { 
+                          ...msg, 
+                          content: accumulatedContent,
+                          thinkingContent: accumulatedThinking
+                        }
+                      : msg
+                  )
+                )
+              }
+            } catch (parseError) {
+              console.error('Error parsing SSE data:', parseError)
+            }
+          }
+        }
+      }
     } catch (error) {
       console.error('Error:', error)
-      const errorMessage: ChatMessage = {
-        id: Date.now() + 1,
-        content: 'Sorry, there was an error processing your request. Please make sure Ollama is running locally.',
-        isUser: false,
-        timestamp: new Date()
-      }
-      setMessages(prev => [...prev, errorMessage])
+      setMessages(prev => 
+        prev.map(msg => 
+          msg.id === aiMessageId 
+            ? { 
+                ...msg, 
+                content: 'Sorry, there was an error processing your request. Please make sure Ollama is running locally.',
+                thinkingContent: ''
+              }
+            : msg
+        )
+      )
     } finally {
       setIsLoading(false)
+      setStreamingMessageId(null)
     }
   }
 
@@ -269,7 +550,7 @@ export default function ChatPage() {
           <Message $isUser={false}>
             <MessageLabel>AI Assistant</MessageLabel>
             <MessageContent>
-              Hello! I&apos;m your AI assistant powered by Ollama. How can I help you today?
+              Hello! I&apos;m your AI assistant powered by DeepSeek-R1. I can show my thinking process as I work through problems. How can I help you today?
             </MessageContent>
           </Message>
         ) : (
@@ -278,7 +559,25 @@ export default function ChatPage() {
               <MessageLabel>
                 {message.isUser ? 'You' : 'AI Assistant'}
               </MessageLabel>
-              <MessageContent>{message.content}</MessageContent>
+              <MessageContent>
+                {!message.isUser && message.thinkingContent && (
+                  <ThinkingSection>
+                    <ThinkingToggle onClick={() => toggleThinking(message.id)}>
+                      🧠 {expandedThinking.has(message.id) ? 'Hide' : 'Show'} Thinking Process
+                    </ThinkingToggle>
+                    <ThinkingContent $isExpanded={expandedThinking.has(message.id)}>
+                      <ContentWithMath content={message.thinkingContent} />
+                    </ThinkingContent>
+                  </ThinkingSection>
+                )}
+                <ContentWithMath content={message.content} />
+                {streamingMessageId === message.id && !message.content && !message.thinkingContent && (
+                  <TypingIndicator>Thinking</TypingIndicator>
+                )}
+                {streamingMessageId === message.id && (message.content || message.thinkingContent) && (
+                  <TypingIndicator />
+                )}
+              </MessageContent>
             </Message>
           ))
         )}

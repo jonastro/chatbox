@@ -51,6 +51,6 @@ The quadratic formula is: $x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}$
 
 And here's a display equation:
 
-\[E = mc^2\]
+$E = mc^2$
 
 **Note**: The chatbot automatically detects and renders all of these formats! 

@@ -52,6 +52,8 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to start c
 - 🔍 **Expandable thinking sections** to see AI's reasoning steps
 - 📐 **LaTeX math rendering** with KaTeX (supports `\[...\]` and `$...$`)
 - 🧮 **Real-time math display** during streaming responses
+- 🎯 **Model selector** with auto-discovery of available Ollama models
+- 🔄 **Dynamic model switching** without restarting the application
 - 🚀 **Fast local inference** with progressive text display
 
 ## Project Structure
@@ -59,16 +61,19 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to start c
 ```
 ├── app/
 │   ├── api/
-│   │   └── chat/
-│   │       └── stream/
-│   │           └── route.ts # Streaming API endpoint
+│   │   ├── chat/
+│   │   │   └── stream/
+│   │   │       └── route.ts # Streaming API endpoint
+│   │   └── models/
+│   │       └── route.ts     # Models API endpoint
 │   ├── components/
 │   │   └── StyledComponentsRegistry.tsx  # Styled components setup
 │   ├── globals.css          # Global styles
 │   ├── layout.tsx           # Root layout
 │   └── page.tsx             # Chat interface
 ├── lib/
-│   └── ollama.ts            # Ollama client utilities (with streaming)
+│   ├── math.ts              # LaTeX math parsing utilities
+│   └── ollama.ts            # Ollama client utilities (with streaming & models)
 ├── .eslintrc.json          # ESLint configuration
 ├── .gitignore              # Git ignore rules
 ├── next.config.js          # Next.js configuration
@@ -110,6 +115,22 @@ Full support for mathematical expressions with **KaTeX**:
 \[S_{n+1} = \frac{n(n+1)}{2} + \frac{2(n+1)}{2}\]  # Display math
 The equation $E = mc^2$ is famous.                    # Inline math
 ```
+
+### Model Selection
+
+Dynamic model switching with **Ollama integration**:
+
+- **Auto-Discovery**: Automatically detects all available Ollama models
+- **Live Switching**: Change models without restarting the application
+- **Model Refresh**: Update model list with new installations
+- **Smart Defaults**: Automatically selects best available model
+- **Model Display**: Friendly formatting of model names in the UI
+
+**Usage**:
+1. Install models via Ollama: `ollama pull llama3.2`
+2. Refresh models in the UI using the 🔄 button
+3. Select any model from the dropdown
+4. Start chatting with the new model immediately
 
 ## Architecture
 

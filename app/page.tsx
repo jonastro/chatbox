@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import styled from 'styled-components'
-import { ChatMessage as OllamaChatMessage } from '@/lib/ollama'
+import { ChatMessage as OllamaChatMessage, OllamaModel } from '@/lib/ollama'
 import { parseContentWithMath, renderMath, MathSegment } from '@/lib/math'
 
 const ChatContainer = styled.div`
@@ -37,8 +37,43 @@ const ChatHeader = styled.div`
 const HeaderActions = styled.div`
   display: flex;
   justify-content: center;
-  gap: 10px;
+  align-items: center;
+  gap: 15px;
   margin-top: 15px;
+  flex-wrap: wrap;
+`
+
+const ModelSelector = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: white;
+  font-size: 0.9rem;
+`
+
+const ModelSelect = styled.select`
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 15px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  outline: none;
+  
+  &:hover {
+    background: rgba(255, 255, 255, 0.3);
+  }
+  
+  &:focus {
+    border-color: rgba(255, 255, 255, 0.5);
+  }
+  
+  option {
+    background: #333;
+    color: white;
+  }
 `
 
 const ClearButton = styled.button`
@@ -54,6 +89,29 @@ const ClearButton = styled.button`
   
   &:hover {
     background: rgba(255, 255, 255, 0.3);
+    transform: translateY(-1px);
+  }
+  
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+  }
+`
+
+const RefreshButton = styled.button`
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+  
+  &:hover {
+    background: rgba(255, 255, 255, 0.25);
     transform: translateY(-1px);
   }
   
@@ -295,10 +353,41 @@ export default function ChatPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [streamingMessageId, setStreamingMessageId] = useState<number | null>(null)
   const [expandedThinking, setExpandedThinking] = useState<Set<number>>(new Set())
+  const [availableModels, setAvailableModels] = useState<OllamaModel[]>([])
+  const [selectedModel, setSelectedModel] = useState<string>('deepseek-r1:latest')
+  const [modelsLoading, setModelsLoading] = useState(true)
 
   const clearConversation = () => {
     setMessages([])
     setExpandedThinking(new Set())
+  }
+
+  const fetchModels = async () => {
+    try {
+      setModelsLoading(true)
+      const response = await fetch('/api/models')
+      const data = await response.json()
+      if (data.models) {
+        setAvailableModels(data.models)
+        // Set first available model as default if current selection is not available
+        if (data.models.length > 0 && !data.models.find((m: OllamaModel) => m.name === selectedModel)) {
+          setSelectedModel(data.models[0].name)
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching models:', error)
+    } finally {
+      setModelsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchModels()
+  }, [])
+
+  const formatModelName = (name: string) => {
+    // Format model names for better display
+    return name.replace(/[:]/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
   }
 
   const toggleThinking = (messageId: number) => {
@@ -412,7 +501,10 @@ export default function ChatPage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ messages: ollamaMessages }),
+        body: JSON.stringify({ 
+          messages: ollamaMessages,
+          model: selectedModel 
+        }),
       })
 
       if (!response.ok) {
@@ -536,6 +628,33 @@ export default function ChatPage() {
         <h1>🤖 AI Chatbot</h1>
         <p>Powered by Ollama - Chat with AI locally</p>
         <HeaderActions>
+          <ModelSelector>
+            <span>🧠 Model:</span>
+            <ModelSelect
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              disabled={modelsLoading || isLoading}
+            >
+              {modelsLoading ? (
+                <option>Loading models...</option>
+              ) : availableModels.length === 0 ? (
+                <option>No models available</option>
+              ) : (
+                availableModels.map((model) => (
+                  <option key={model.name} value={model.name}>
+                    {formatModelName(model.name)}
+                  </option>
+                ))
+              )}
+            </ModelSelect>
+            <RefreshButton
+              onClick={fetchModels}
+              disabled={modelsLoading}
+              title="Refresh available models"
+            >
+              🔄
+            </RefreshButton>
+          </ModelSelector>
           <ClearButton 
             onClick={clearConversation}
             disabled={isLoading || messages.length === 0}
@@ -550,7 +669,9 @@ export default function ChatPage() {
           <Message $isUser={false}>
             <MessageLabel>AI Assistant</MessageLabel>
             <MessageContent>
-              Hello! I&apos;m your AI assistant powered by DeepSeek-R1. I can show my thinking process as I work through problems. How can I help you today?
+              Hello! I&apos;m your AI assistant powered by {formatModelName(selectedModel)}. 
+              {selectedModel.includes('deepseek-r1') && ' I can show my thinking process as I work through problems.'} 
+              How can I help you today?
             </MessageContent>
           </Message>
         ) : (

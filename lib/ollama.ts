@@ -23,10 +23,10 @@ export async function generateResponse(messages: ChatMessage[]): Promise<string>
   }
 }
 
-export async function* generateStreamingResponse(messages: ChatMessage[]): AsyncGenerator<string, void, unknown> {
+export async function* generateStreamingResponse(messages: ChatMessage[], model: string = 'deepseek-r1:latest'): AsyncGenerator<string, void, unknown> {
   try {
     const response = await ollama.chat({
-      model: 'deepseek-r1:latest', // You can change this to any model you have installed
+      model: model,
       messages: messages,
       stream: true,
     })
@@ -39,5 +39,31 @@ export async function* generateStreamingResponse(messages: ChatMessage[]): Async
   } catch (error) {
     console.error('Error calling Ollama streaming:', error)
     yield 'Sorry, I encountered an error while processing your request. Please make sure Ollama is running locally.'
+  }
+}
+
+export interface OllamaModel {
+  name: string
+  model: string
+  modified_at: Date
+  size: number
+  digest: string
+  details: {
+    parent_model?: string
+    format: string
+    family: string
+    families?: string[]
+    parameter_size: string
+    quantization_level: string
+  }
+}
+
+export async function getAvailableModels(): Promise<OllamaModel[]> {
+  try {
+    const response = await ollama.list()
+    return response.models || []
+  } catch (error) {
+    console.error('Error fetching available models:', error)
+    return []
   }
 } 

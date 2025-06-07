@@ -3,13 +3,15 @@ import { generateStreamingResponse, ChatMessage } from '@/lib/ollama'
 
 export async function POST(request: NextRequest) {
   try {
-    const { messages } = await request.json()
+    const { messages, model } = await request.json()
     
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return new Response('Messages array is required and cannot be empty', {
         status: 400,
       })
     }
+
+    const selectedModel = model || 'deepseek-r1:latest'
 
     // Add system message for better context
     const systemMessage: ChatMessage = {
@@ -25,7 +27,7 @@ export async function POST(request: NextRequest) {
         const encoder = new TextEncoder()
         
         try {
-          for await (const chunk of generateStreamingResponse(allMessages)) {
+          for await (const chunk of generateStreamingResponse(allMessages, selectedModel)) {
             const data = `data: ${JSON.stringify({ content: chunk })}\n\n`
             controller.enqueue(encoder.encode(data))
           }
